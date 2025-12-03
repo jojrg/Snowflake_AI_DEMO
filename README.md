@@ -1,10 +1,27 @@
 # Snowflake Intelligence Demo
 
+**Copy, Paste, Run & Done in less than 10 mins!**
+
+**Just run the SQL script as an ACCOUNTADMIN as-is & your are done!**
+
+
+
+
 This project demonstrates the comprehensive Snowflake Intelligence capabilities including:
 - **Cortex Analyst** (Text-to-SQL via semantic views)
 - **Cortex Search** (Vector search for unstructured documents)  
 - **Snowflake Intelligence Agent** (Multi-tool AI agent with orchestration)
 - **Git Integration** (Automated data loading from GitHub repository)
+
+## Demo video showing some of what you can do!
+
+![Snowflake Intelligence Demo Video](https://i9.ytimg.com/vi_webp/7T8LI5wIfDk/maxresdefault.webp?v=68ec51c9&sqp=COzkwckG&rs=AOn4CLBsQvKImaMig2cBnoNgogsrZ1BrPg)(https://youtu.be/7T8LI5wIfDk)
+
+## Demo video generating streamlit apps from conversations!
+![Snowflake Intelligence Demo Video](https://i9.ytimg.com/vi_webp/zNVx3hwKbyc/maxresdefault.webp?v=68eec089&sqp=CJjnwckG&rs=AOn4CLAU_RZKFbJnWxrXd2lOeGZgsk-XYw)(https://youtu.be/zNVx3hwKbyc)
+
+
+
 
 ## Key Components
 
