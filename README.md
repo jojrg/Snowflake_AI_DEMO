@@ -18,7 +18,7 @@ This project demonstrates the comprehensive Snowflake Intelligence capabilities 
 ![Snowflake Intelligence Demo Video](https://github.com/NickAkincilar/Snowflake_AI_DEMO/blob/main/images/SFI_Demo.webp?raw=true)(https://youtu.be/7T8LI5wIfDk)
 
 ## Demo video generating streamlit apps from conversations!
-![Snowflake Intelligence Demo Video](https://i9.ytimg.com/vi_webp/zNVx3hwKbyc/maxresdefault.webp?v=68eec089&sqp=CJjnwckG&rs=AOn4CLAU_RZKFbJnWxrXd2lOeGZgsk-XYw)(https://youtu.be/zNVx3hwKbyc)
+![Snowflake Intelligence Demo Video](https://github.com/NickAkincilar/Snowflake_AI_DEMO/blob/main/images/SFI_streamlit.webp?raw=true)(https://youtu.be/zNVx3hwKbyc)
 
 
 
