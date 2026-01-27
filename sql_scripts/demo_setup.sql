@@ -5,12 +5,18 @@
     -- Snowflake AI Demo - Complete Setup Script
     -- This script creates the database, schema, tables, and loads all data
     -- Repository: https://github.com/NickAkincilar/Snowflake_AI_DEMO.git
+    -- Forked Repository: https://github.com/jojrg/Snowflake_AI_DEMO.git
     -- ========================================================================
 
     
 
     -- Switch to accountadmin role to create warehouse
     USE ROLE accountadmin;
+
+    -- Enable Cross Region Inferencing
+    ALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'AWS_EU';
+
+
 
     -- Enable Snowflake Intelligence by creating the Config DB & Schema
     CREATE DATABASE IF NOT EXISTS snowflake_intelligence;
@@ -74,9 +80,9 @@
 
 use role accountadmin;
     -- Create API Integration for GitHub (public repository access)
-    CREATE OR REPLACE API INTEGRATION git_api_integration
+    CREATE OR REPLACE API INTEGRATION git_api_integration_jojrg
         API_PROVIDER = git_https_api
-        API_ALLOWED_PREFIXES = ('https://github.com/NickAkincilar/')
+        API_ALLOWED_PREFIXES = ('https://github.com/jojrg/')
         ENABLED = TRUE;
 
 
@@ -86,8 +92,8 @@ GRANT USAGE ON INTEGRATION GIT_API_INTEGRATION TO ROLE SF_Intelligence_Demo;
 use role SF_Intelligence_Demo;
     -- Create Git repository integration for the public demo repository
     CREATE OR REPLACE GIT REPOSITORY SF_AI_DEMO_REPO
-        API_INTEGRATION = git_api_integration
-        ORIGIN = 'https://github.com/NickAkincilar/Snowflake_AI_DEMO.git';
+        API_INTEGRATION = git_api_integration_jojrg
+        ORIGIN = 'https://github.com/jojrg/Snowflake_AI_DEMO.git';
 
     -- Create internal stage for copied data files
     CREATE OR REPLACE STAGE INTERNAL_DATA_STAGE
@@ -758,13 +764,27 @@ create or replace semantic view SF_AI_DEMO.DEMO_SCHEMA.MARKETING_SEMANTIC_VIEW
   -- ========================================================================
   -- HR SEMANTIC VIEW
   -- ========================================================================
-create or replace semantic view SF_AI_DEMO.DEMO_SCHEMA.HR_SEMANTIC_VIEW
+CREATE OR REPLACE SEMANTIC VIEW SF_AI_DEMO.DEMO_SCHEMA.HR_SEMANTIC_VIEW
   tables (
-    DEPARTMENTS as DEPARTMENT_DIM primary key (DEPARTMENT_KEY) with synonyms=('departments','business units') comment='Department dimension for organizational analysis',
-    EMPLOYEES as EMPLOYEE_DIM primary key (EMPLOYEE_KEY) with synonyms=('employees','staff','workforce') comment='Employee dimension with personal information',
-    HR_RECORDS as HR_EMPLOYEE_FACT primary key (HR_FACT_ID) with synonyms=('hr data','employee records') comment='HR employee fact data for workforce analysis',
-    JOBS as JOB_DIM primary key (JOB_KEY) with synonyms=('job titles','positions','roles') comment='Job dimension with titles and levels',
-    LOCATIONS as LOCATION_DIM primary key (LOCATION_KEY) with synonyms=('locations','offices','sites') comment='Location dimension for geographic analysis'
+    DEPARTMENTS as DEPARTMENT_DIM primary key (DEPARTMENT_KEY) 
+      with synonyms=('departments','business units') 
+      comment='Department dimension for organizational analysis',
+    
+    EMPLOYEES as EMPLOYEE_DIM primary key (EMPLOYEE_KEY) 
+      with synonyms=('employees','staff','workforce','headcount') 
+      comment='Master employee dimension. Use this table as the primary source for employee headcount. Each row represents one unique employee. Join with HR_RECORDS to get employment status and salary details.',
+    
+    HR_RECORDS as HR_EMPLOYEE_FACT primary key (HR_FACT_ID) 
+      with synonyms=('hr data','employee records','hr transactions') 
+      comment='HR fact table with point-in-time employee records. Multiple records may exist per employee. When attrition_flag=1, the DATE column indicates when the employee LEFT the company. Do NOT use this table alone for headcount - use EMPLOYEES table and check attrition status.',
+    
+    JOBS as JOB_DIM primary key (JOB_KEY) 
+      with synonyms=('job titles','positions','roles') 
+      comment='Job dimension with titles and levels',
+    
+    LOCATIONS as LOCATION_DIM primary key (LOCATION_KEY) 
+      with synonyms=('locations','offices','sites') 
+      comment='Location dimension for geographic analysis'
   )
   relationships (
     HR_TO_DEPARTMENTS as HR_RECORDS(DEPARTMENT_KEY) references DEPARTMENTS(DEPARTMENT_KEY),
@@ -773,39 +793,86 @@ create or replace semantic view SF_AI_DEMO.DEMO_SCHEMA.HR_SEMANTIC_VIEW
     HR_TO_LOCATIONS as HR_RECORDS(LOCATION_KEY) references LOCATIONS(LOCATION_KEY)
   )
   facts (
-    HR_RECORDS.ATTRITION_FLAG as attrition_flag with synonyms=('turnover_indicator','employee_departure_flag','separation_flag','employee_retention_status','churn_status','employee_exit_indicator') comment='Attrition flag. value is 0 if employee is currently active. 1 if employee quit & left the company. Always filter by 0 to show active employees unless specified otherwise',
-    HR_RECORDS.EMPLOYEE_RECORD as 1 comment='Count of employee records',
-    HR_RECORDS.EMPLOYEE_SALARY as salary comment='Employee salary in dollars'
+    HR_RECORDS.ATTRITION_FLAG as attrition_flag 
+      with synonyms=('turnover_indicator','employee_departure_flag','separation_flag','left_company_flag') 
+      comment='Attrition flag in HR_RECORDS. Value 0 means employee was active at this record date. Value 1 means the employee LEFT/QUIT on this record DATE. To find when an employee left, filter attrition_flag=1 and use the DATE column. An employee with no attrition_flag=1 record is still employed.',
+    
+    HR_RECORDS.EMPLOYEE_RECORD as 1 
+      comment='Count of HR fact records (not distinct employees). Use for counting HR transactions.',
+    
+    HR_RECORDS.EMPLOYEE_SALARY as salary 
+      comment='Employee salary in dollars at the time of the HR record',
+    
+    EMPLOYEES.EMPLOYEE_COUNT as 1 
+      comment='Use this to count distinct employees. Each row in EMPLOYEES is one unique person.'
   )
   dimensions (
     DEPARTMENTS.DEPARTMENT_KEY as DEPARTMENT_KEY,
-    DEPARTMENTS.DEPARTMENT_NAME as department_name with synonyms=('department','business unit','division') comment='Name of the department',
+    DEPARTMENTS.DEPARTMENT_NAME as department_name 
+      with synonyms=('department','business unit','division') 
+      comment='Name of the department',
+    
     EMPLOYEES.EMPLOYEE_KEY as EMPLOYEE_KEY,
-    EMPLOYEES.EMPLOYEE_NAME as employee_name with synonyms=('employee','staff member','person','sales rep','manager','director','executive') comment='Name of the employee',
-    EMPLOYEES.GENDER as gender with synonyms=('gender','sex') comment='Employee gender',
-    EMPLOYEES.HIRE_DATE as hire_date with synonyms=('hire date','start date') comment='Date when employee was hired',
+    EMPLOYEES.EMPLOYEE_NAME as employee_name 
+      with synonyms=('employee','staff member','person','sales rep','manager','director','executive') 
+      comment='Name of the employee',
+    EMPLOYEES.GENDER as gender 
+      with synonyms=('gender','sex') 
+      comment='Employee gender',
+    EMPLOYEES.HIRE_DATE as hire_date 
+      with synonyms=('hire date','start date','employment start','joined date') 
+      comment='Date when employee was hired. Use this to determine if employee was employed in a given year (hire_date <= year end).',
+    
+    EMPLOYEES.HIRE_YEAR as YEAR(hire_date) 
+      comment='Year when employee was hired. Useful for analyzing hiring trends by year.',
+    
     HR_RECORDS.DEPARTMENT_KEY as DEPARTMENT_KEY,
     HR_RECORDS.EMPLOYEE_KEY as EMPLOYEE_KEY,
     HR_RECORDS.HR_FACT_ID as HR_FACT_ID,
     HR_RECORDS.JOB_KEY as JOB_KEY,
     HR_RECORDS.LOCATION_KEY as LOCATION_KEY,
-    HR_RECORDS.RECORD_DATE as date with synonyms=('date','record date') comment='Date of the HR record',
-    HR_RECORDS.RECORD_MONTH as MONTH(date) comment='Month of the HR record',
-    HR_RECORDS.RECORD_YEAR as YEAR(date) comment='Year of the HR record',
+    HR_RECORDS.RECORD_DATE as date 
+      with synonyms=('date','record date','termination date when attrition_flag=1') 
+      comment='Date of the HR record. When attrition_flag=1, this is the TERMINATION DATE when the employee left.',
+    HR_RECORDS.RECORD_MONTH as MONTH(date) 
+      comment='Month of the HR record',
+    HR_RECORDS.RECORD_YEAR as YEAR(date) 
+      comment='Year of the HR record. When attrition_flag=1, this is the year employee left.',
+    
     JOBS.JOB_KEY as JOB_KEY,
-    JOBS.JOB_LEVEL as job_level with synonyms=('level','grade','seniority') comment='Job level or grade',
-    JOBS.JOB_TITLE as job_title with synonyms=('job title','position','role') comment='Employee job title',
+    JOBS.JOB_LEVEL as job_level 
+      with synonyms=('level','grade','seniority') 
+      comment='Job level or grade',
+    JOBS.JOB_TITLE as job_title 
+      with synonyms=('job title','position','role') 
+      comment='Employee job title',
+    
     LOCATIONS.LOCATION_KEY as LOCATION_KEY,
-    LOCATIONS.LOCATION_NAME as location_name with synonyms=('location','office','site') comment='Work location'
+    LOCATIONS.LOCATION_NAME as location_name 
+      with synonyms=('location','office','site') 
+      comment='Work location'
   )
   metrics (
-    HR_RECORDS.ATTRITION_COUNT as SUM(hr_records.attrition_flag) comment='Number of employees who left',
-    HR_RECORDS.AVG_SALARY as AVG(hr_records.employee_salary) comment='average employee salary',
-    HR_RECORDS.TOTAL_EMPLOYEES as COUNT(hr_records.employee_record) comment='Total number of employees',
-    HR_RECORDS.TOTAL_SALARY_COST as SUM(hr_records.EMPLOYEE_SALARY) comment='Total salary cost'
+    HR_RECORDS.ATTRITION_COUNT as SUM(hr_records.attrition_flag) 
+      comment='Number of attrition events (employees who left). Count of records where attrition_flag=1.',
+    HR_RECORDS.AVG_SALARY as AVG(hr_records.employee_salary) 
+      comment='Average employee salary from HR records',
+    
+    HR_RECORDS.TOTAL_HR_RECORDS as COUNT(hr_records.employee_record) 
+      comment='Total number of HR fact records. NOTE: This is NOT distinct employee count - one employee may have multiple records.',
+    
+    HR_RECORDS.TOTAL_SALARY_COST as SUM(hr_records.EMPLOYEE_SALARY) 
+      comment='Total salary cost from HR records',
+    
+    EMPLOYEES.TOTAL_EMPLOYEES as COUNT(employees.employee_count) 
+      comment='Total distinct employees. Use this for headcount calculations.'
   )
-  comment='Semantic view for HR analytics and workforce management'
-  with extension (CA='{"tables":[{"name":"DEPARTMENTS","dimensions":[{"name":"DEPARTMENT_KEY"},{"name":"DEPARTMENT_NAME","sample_values":["Finance","Accounting","Treasury"]}]},{"name":"EMPLOYEES","dimensions":[{"name":"EMPLOYEE_KEY"},{"name":"EMPLOYEE_NAME","sample_values":["Grant Frey","Elizabeth George","Olivia Mcdaniel"]},{"name":"GENDER"},{"name":"HIRE_DATE"}]},{"name":"HR_RECORDS","dimensions":[{"name":"DEPARTMENT_KEY"},{"name":"EMPLOYEE_KEY"},{"name":"HR_FACT_ID"},{"name":"JOB_KEY"},{"name":"LOCATION_KEY"},{"name":"RECORD_DATE"},{"name":"RECORD_MONTH"},{"name":"RECORD_YEAR"}],"facts":[{"name":"ATTRITION_FLAG","sample_values":["0","1"]},{"name":"EMPLOYEE_RECORD"},{"name":"EMPLOYEE_SALARY"}],"metrics":[{"name":"ATTRITION_COUNT"},{"name":"AVG_SALARY"},{"name":"TOTAL_EMPLOYEES"},{"name":"TOTAL_SALARY_COST"}]},{"name":"JOBS","dimensions":[{"name":"JOB_KEY"},{"name":"JOB_LEVEL"},{"name":"JOB_TITLE"}]},{"name":"LOCATIONS","dimensions":[{"name":"LOCATION_KEY"},{"name":"LOCATION_NAME"}]}],"relationships":[{"name":"HR_TO_DEPARTMENTS","relationship_type":"many_to_one"},{"name":"HR_TO_EMPLOYEES","relationship_type":"many_to_one"},{"name":"HR_TO_JOBS","relationship_type":"many_to_one"},{"name":"HR_TO_LOCATIONS","relationship_type":"many_to_one"}],"verified_queries":[{"name":"List of all active employees","question":"List of all active employees","sql":"select\\n  h.employee_key,\\n  e.employee_name,\\nfrom\\n  employees e\\n  left join hr_records h on e.employee_key = h.employee_key\\ngroup by\\n  all\\nhaving\\n  sum(h.attrition_flag) = 0;","use_as_onboarding_question":false,"verified_by":"Nick Akincilar","verified_at":1753846263},{"name":"List of all inactive employees","question":"List of all inactive employees","sql":"SELECT\\n  h.employee_key,\\n  e.employee_name\\nFROM\\n  employees AS e\\n  LEFT JOIN hr_records AS h ON e.employee_key = h.employee_key\\nGROUP BY\\n  ALL\\nHAVING\\n  SUM(h.attrition_flag) > 0","use_as_onboarding_question":false,"verified_by":"Nick Akincilar","verified_at":1753846300}],"custom_instructions":"- Each employee can have multiple hr_employee_fact records. \\n- Only one hr_employee_fact record per employee is valid and that is the one which has the highest date value."}');
+  comment='Semantic view for HR analytics and workforce management. IMPORTANT: For headcount queries, use EMPLOYEES table with hire_date and check attrition status from HR_RECORDS. An employee is active in a given year if: (1) hire_date <= year end, AND (2) no attrition_flag=1 record exists before year end.'
+  
+  with extension (CA='{"tables":[{"name":"DEPARTMENTS","dimensions":[{"name":"DEPARTMENT_KEY"},{"name":"DEPARTMENT_NAME","sample_values":["Finance","Accounting","Treasury"]}]},{"name":"EMPLOYEES","dimensions":[{"name":"EMPLOYEE_KEY"},{"name":"EMPLOYEE_NAME","sample_values":["Grant Frey","Elizabeth George","Olivia Mcdaniel"]},{"name":"GENDER","sample_values":["M","F"]},{"name":"HIRE_DATE"},{"name":"HIRE_YEAR"}],"facts":[{"name":"EMPLOYEE_COUNT"}],"metrics":[{"name":"TOTAL_EMPLOYEES"}]},{"name":"HR_RECORDS","dimensions":[{"name":"DEPARTMENT_KEY"},{"name":"EMPLOYEE_KEY"},{"name":"HR_FACT_ID"},{"name":"JOB_KEY"},{"name":"LOCATION_KEY"},{"name":"RECORD_DATE"},{"name":"RECORD_MONTH"},{"name":"RECORD_YEAR"}],"facts":[{"name":"ATTRITION_FLAG","sample_values":["0","1"]},{"name":"EMPLOYEE_RECORD"},{"name":"EMPLOYEE_SALARY"}],"metrics":[{"name":"ATTRITION_COUNT"},{"name":"AVG_SALARY"},{"name":"TOTAL_HR_RECORDS"},{"name":"TOTAL_SALARY_COST"}]},{"name":"JOBS","dimensions":[{"name":"JOB_KEY"},{"name":"JOB_LEVEL"},{"name":"JOB_TITLE"}]},{"name":"LOCATIONS","dimensions":[{"name":"LOCATION_KEY"},{"name":"LOCATION_NAME"}]}],"relationships":[{"name":"HR_TO_DEPARTMENTS","relationship_type":"many_to_one"},{"name":"HR_TO_EMPLOYEES","relationship_type":"many_to_one"},{"name":"HR_TO_JOBS","relationship_type":"many_to_one"},{"name":"HR_TO_LOCATIONS","relationship_type":"many_to_one"}],"verified_queries":[{"name":"Employee headcount by year","question":"What is the employee headcount by year?","sql":"WITH years AS (SELECT 2010 + ROW_NUMBER() OVER (ORDER BY SEQ4()) - 1 AS year FROM TABLE(GENERATOR(ROWCOUNT => 16))), employee_tenure AS (SELECT e.employee_key, e.hire_date, MIN(CASE WHEN h.attrition_flag = 1 THEN h.date END) AS left_date FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM AS e LEFT JOIN SF_AI_DEMO.DEMO_SCHEMA.HR_EMPLOYEE_FACT AS h ON e.employee_key = h.employee_key GROUP BY e.employee_key, e.hire_date) SELECT y.year, COUNT(DISTINCT et.employee_key) AS headcount FROM years AS y LEFT JOIN employee_tenure AS et ON et.hire_date <= DATE_FROM_PARTS(y.year, 12, 31) AND (et.left_date IS NULL OR et.left_date > DATE_FROM_PARTS(y.year, 12, 31)) GROUP BY y.year ORDER BY y.year","use_as_onboarding_question":true,"verified_by":"Cortex Code","verified_at":1737993600},{"name":"Employee headcount trend","question":"What is the trend of our employee headcount over the years?","sql":"WITH years AS (SELECT 2010 + ROW_NUMBER() OVER (ORDER BY SEQ4()) - 1 AS year FROM TABLE(GENERATOR(ROWCOUNT => 16))), employee_tenure AS (SELECT e.employee_key, e.hire_date, MIN(CASE WHEN h.attrition_flag = 1 THEN h.date END) AS left_date FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM AS e LEFT JOIN SF_AI_DEMO.DEMO_SCHEMA.HR_EMPLOYEE_FACT AS h ON e.employee_key = h.employee_key GROUP BY e.employee_key, e.hire_date) SELECT y.year, COUNT(DISTINCT et.employee_key) AS headcount FROM years AS y LEFT JOIN employee_tenure AS et ON et.hire_date <= DATE_FROM_PARTS(y.year, 12, 31) AND (et.left_date IS NULL OR et.left_date > DATE_FROM_PARTS(y.year, 12, 31)) GROUP BY y.year ORDER BY y.year","use_as_onboarding_question":false,"verified_by":"Cortex Code","verified_at":1737993600},{"name":"Current active employee count","question":"How many active employees do we have currently?","sql":"SELECT COUNT(DISTINCT e.employee_key) AS active_employee_count FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM AS e WHERE NOT EXISTS (SELECT 1 FROM SF_AI_DEMO.DEMO_SCHEMA.HR_EMPLOYEE_FACT AS h WHERE h.employee_key = e.employee_key AND h.attrition_flag = 1)","use_as_onboarding_question":true,"verified_by":"Cortex Code","verified_at":1737993600},{"name":"Hiring by year","question":"How many employees were hired each year?","sql":"SELECT YEAR(hire_date) AS year, COUNT(DISTINCT employee_key) AS employees_hired FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM GROUP BY YEAR(hire_date) ORDER BY year","use_as_onboarding_question":false,"verified_by":"Cortex Code","verified_at":1737993600},{"name":"List of all active employees","question":"List of all active employees","sql":"SELECT h.employee_key, e.employee_name FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM AS e LEFT JOIN SF_AI_DEMO.DEMO_SCHEMA.HR_EMPLOYEE_FACT AS h ON e.employee_key = h.employee_key GROUP BY ALL HAVING SUM(h.attrition_flag) = 0","use_as_onboarding_question":false,"verified_by":"Nick Akincilar","verified_at":1753846263},{"name":"List of all inactive employees","question":"List of all inactive employees","sql":"SELECT h.employee_key, e.employee_name FROM SF_AI_DEMO.DEMO_SCHEMA.EMPLOYEE_DIM AS e LEFT JOIN SF_AI_DEMO.DEMO_SCHEMA.HR_EMPLOYEE_FACT AS h ON e.employee_key = h.employee_key GROUP BY ALL HAVING SUM(h.attrition_flag) > 0","use_as_onboarding_question":false,"verified_by":"Nick Akincilar","verified_at":1753846263}]}');
+
+  
+  
   -- ========================================================================
   -- VERIFICATION
   -- ========================================================================
@@ -1251,7 +1318,7 @@ FROM SPECIFICATION $$
     "orchestration": ""
   },
   "instructions": {
-    "response": "You are a data analyst who has access to sales, finance, marketing & HR datamarts.  If user does not specify a date range assume it for year 2025. Leverage data from all domains to analyse & answer user questions. Provide visualizations if possible. Trendlines should default to linecharts, Categories Barchart.",
+    "response": "You are a data analyst who has access to sales, finance, marketing & HR datamarts.  If user does not specify a date range assume it for year 2025. Leverage data from all domains to analyse & answer user questions. Provide visualizations if possible. Trendlines should default to linecharts, Categories Barchart. If suitable also provide recommendations based on the key findings.",
     "orchestration": "Use cortex search for known entities and pass the results to cortex analyst for detailed analysis.\nIf answering sales related question from datamart, Always make sure to include the product_dim table & filter product VERTICAL by 'Retail' for all questions but don't show this fact while explaining thinking steps.\n\nFor Marketing Datamart:\nOpportunity Status=Closed_Won indicates an actual sale. \nSalesID in marketing datamart links an opportunity to a Sales record in Sales Datamart SalesID columns\n\n\n",
     "sample_questions": [
       {
