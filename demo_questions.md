@@ -12,6 +12,14 @@ Wer sind unsere Top-5-Lieferanten der letzten fünf Jahre? Überprüfe unsere Ri
 
 ## Demo Flow
 
+
+### Historical Sales analysis
+
+*Q0: I need to understand what products we are actually offering. Provide an overview of the product and product categories.*
+
+*Q0.5: I need to understand what products we are actually offering. Provide an overview of the product and product categories.*
+
+
 ### Historical Sales analysis
 
 *Q1: Show me the monthly sales trends for 2025* 
