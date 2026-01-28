@@ -86,7 +86,7 @@ use role accountadmin;
         ENABLED = TRUE;
 
 
-GRANT USAGE ON INTEGRATION GIT_API_INTEGRATION TO ROLE SF_Intelligence_Demo;
+GRANT USAGE ON INTEGRATION GIT_API_INTEGRATION_JOJRG TO ROLE SF_Intelligence_Demo;
 
 
 use role SF_Intelligence_Demo;
